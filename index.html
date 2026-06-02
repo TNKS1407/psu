@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0c1014">
+<title>電源制御ワークベンチ (Buck/Boost)</title>
+<style>
+  :root{
+    --bg:#0c1014; --panel:#141b22; --panel2:#1b242d; --line:#26323d;
+    --ink:#e7eef3; --dim:#8aa0b0; --faint:#5d7080;
+    --sig:#27d3c4; --sig2:#6aa9ff; --warn:#ffb454; --bad:#ff6b6b;
+    --rhp:#5be36b; --ok:#27d3c4;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    font-size:15px;line-height:1.45;-webkit-text-size-adjust:100%}
+  body{padding:0 0 48px;max-width:760px;margin:0 auto}
+  header{position:sticky;top:0;z-index:5;background:linear-gradient(180deg,#0c1014 70%,rgba(12,16,20,0));
+    padding:14px 16px 10px;backdrop-filter:blur(6px)}
+  h1{font-size:15px;margin:0;letter-spacing:.04em;font-weight:600;color:var(--ink)}
+  h1 .tag{color:var(--sig);font-family:var(--mono);font-size:12px}
+  .sub{color:var(--faint);font-size:11.5px;margin-top:2px;font-family:var(--mono)}
+  .wrap{padding:0 16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin:12px 0}
+  .card h2{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--dim);margin:0 0 10px;font-weight:600}
+  .seg{display:flex;gap:4px;background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:4px}
+  .seg button{flex:1;border:0;background:transparent;color:var(--dim);font-weight:600;font-size:14px;padding:9px 0;border-radius:8px;font-family:var(--sans);transition:.15s}
+  .seg button.on{background:var(--sig);color:#04201e;box-shadow:0 1px 8px rgba(39,211,196,.3)}
+  select,input{font-family:var(--mono);font-size:14px;background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:9px 10px;width:100%}
+  select{margin-top:8px}
+  .desc{color:var(--dim);font-size:12px;margin-top:7px;line-height:1.5}
+  details{margin-top:10px}
+  details>summary{cursor:pointer;color:var(--sig2);font-size:12.5px;font-family:var(--mono);list-style:none;padding:4px 0;user-select:none}
+  details>summary::-webkit-details-marker{display:none}
+  details>summary::before{content:"▸ ";color:var(--faint)}
+  details[open]>summary::before{content:"▾ "}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;margin-top:10px}
+  .fld label{display:block;font-size:10.5px;color:var(--faint);font-family:var(--mono);margin-bottom:3px;letter-spacing:.03em}
+  .chips{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .chip{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+  .chip .k{font-size:10px;color:var(--faint);font-family:var(--mono);letter-spacing:.03em}
+  .chip .v{font-size:18px;font-family:var(--mono);font-weight:600;margin-top:1px;color:var(--ink)}
+  .chip .v small{font-size:11px;color:var(--dim);font-weight:400}
+  .chip.hi .v{color:var(--sig)} .chip.amber .v{color:var(--warn)} .chip.bad .v{color:var(--bad)} .chip.good .v{color:var(--ok)}
+  .warns{margin-top:10px;display:flex;flex-direction:column;gap:7px}
+  .w{font-size:12.5px;border-radius:9px;padding:9px 11px;line-height:1.5;border:1px solid}
+  .w.warn{background:rgba(255,180,84,.08);border-color:rgba(255,180,84,.35);color:#ffd29a}
+  .w.strong{background:rgba(255,107,107,.09);border-color:rgba(255,107,107,.4);color:#ffb0b0}
+  .w.ok{background:rgba(39,211,196,.07);border-color:rgba(39,211,196,.3);color:#9af0e7}
+  canvas{width:100%;display:block;border-radius:8px;touch-action:pan-y}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--dim);margin:8px 2px 0}
+  .legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .ctrls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px}
+  .disc{font-size:11px;color:var(--faint);text-align:center;padding:14px 18px 0;line-height:1.6}
+  .plot-t{font-family:var(--mono);font-size:11px;color:var(--dim);margin:2px 2px 6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>電源制御ワークベンチ <span class="tag">Buck / Boost</span></h1>
+  <div class="sub">averaged model · 設計初期検討/教育用 · オフライン動作</div>
+</header>
+<div class="wrap">
+  <div class="card">
+    <div class="seg" id="seg">
+      <button data-t="buck">Buck (降圧)</button>
+      <button data-t="boost">Boost (昇圧)</button>
+    </div>
+    <select id="preset"></select>
+    <div class="desc" id="presetDesc"></div>
+    <details id="paramBox"><summary>パラメータを編集</summary><div class="grid" id="params"></div></details>
+  </div>
+  <div class="card">
+    <h2>動作点</h2>
+    <div class="chips" id="opChips"></div>
+    <div class="warns" id="opWarns"></div>
+  </div>
+  <div class="card" id="timeCard">
+    <h2 id="timeTitle">時間応答</h2>
+    <div id="boostCtrls" style="display:none">
+      <div class="plot-t">逆応答（デューティステップ・開ループ）— RHP零点の時間波形</div>
+      <div class="ctrls">
+        <div class="fld"><label>ΔD ステップ量</label><input id="bd" type="number" step="0.005" value="0.05"></div>
+        <div class="fld"><label>ステップ [ms]</label><input id="bt" type="number" step="0.1" value="1"></div>
+        <div class="fld"><label>表示 [ms]</label><input id="bte" type="number" step="0.5" value="5"></div>
+      </div>
+      <canvas id="invPlot"></canvas>
+      <div class="row3" id="invChips" style="margin-top:8px"></div>
+      <div class="plot-t" style="margin-top:14px">閉ループ起動応答（参考）</div>
+    </div>
+    <canvas id="timePlot"></canvas>
+    <div class="legend" id="timeLegend"></div>
+  </div>
+  <div class="card">
+    <h2>ループ解析 (Bode)</h2>
+    <div class="chips" id="loopChips"></div>
+    <canvas id="magPlot" style="margin-top:10px"></canvas>
+    <canvas id="phPlot" style="margin-top:6px"></canvas>
+    <div class="legend" id="bodeLegend"></div>
+    <div class="warns" id="loopWarns"></div>
+  </div>
+  <div class="disc">
+    平均化・小信号モデルです。スイッチングリプル厳密形状・サブハーモニック発振・
+    大信号飽和・部品ばらつき・寄生は対象外。最終判断は実機/SPICE/実測で。
+  </div>
+</div>
+<script>
+/* Lightweight buck/boost control physics — pure JS, no deps.
+   Ports simulator/{small_signal_*,compensators,sensors,pwm,metrics,averaged_*}.py
+   Complex numbers as {re, im}. */
+
+const C = {
+  add: (a, b) => ({ re: a.re + b.re, im: a.im + b.im }),
+  sub: (a, b) => ({ re: a.re - b.re, im: a.im - b.im }),
+  mul: (a, b) => ({ re: a.re * b.re - a.im * b.im, im: a.re * b.im + a.im * b.re }),
+  div: (a, b) => {
+    const d = b.re * b.re + b.im * b.im;
+    return { re: (a.re * b.re + a.im * b.im) / d, im: (a.im * b.re - a.re * b.im) / d };
+  },
+  abs: (a) => Math.hypot(a.re, a.im),
+  arg: (a) => Math.atan2(a.im, a.re),
+  r: (x) => ({ re: x, im: 0 }),
+};
+
+// ---- operating point -----------------------------------------------------
+function operatingPoint(p) {
+  const { topology, Vin, Vref: Vout, Iout, Rload: R, L, rL, Cout, ESR, fsw } = p;
+  if (topology === "boost") {
+    let Dp = Vin / Vout; Dp = Math.min(Math.max(Dp, 1e-3), 0.999);
+    const D = 1 - Dp;
+    const Pout = Vout * Iout, Iin = Pout / Vin, ILavg = Iin;
+    const dIL = (Vin * D) / (L * fsw);
+    const dVout = (Iout * D) / (Cout * fsw) + ESR * (ILavg + dIL / 2);
+    const f_lc = Dp / (2 * Math.PI * Math.sqrt(L * Cout));
+    const f_esr = ESR > 0 ? 1 / (2 * Math.PI * ESR * Cout) : Infinity;
+    const f_rhp = (Dp * Dp * R) / (2 * Math.PI * L);
+    const mode = ILavg < dIL / 2 ? "DCM (risk)" : "CCM";
+    return { D, Pout, Iin, dIL, dVout, I_boundary: dIL / 2, f_lc, f_esr, f_rhp, mode,
+             ripple_pct: (dVout / Vout) * 100, topology };
+  }
+  const D = Vout / Vin, Pout = Vout * Iout, Iin = Pout / Vin;
+  const dIL = ((Vin - Vout) * D) / (L * fsw);
+  const dVout = dIL / (8 * Cout * fsw) + ESR * dIL;
+  const f_lc = 1 / (2 * Math.PI * Math.sqrt(L * Cout));
+  const f_esr = ESR > 0 ? 1 / (2 * Math.PI * ESR * Cout) : Infinity;
+  const mode = Iout < dIL / 2 ? "DCM (risk)" : "CCM";
+  return { D, Pout, Iin, dIL, dVout, I_boundary: dIL / 2, f_lc, f_esr, f_rhp: Infinity,
+           mode, ripple_pct: (dVout / Vout) * 100, topology };
+}
+
+// ---- small-signal state space (returns A,B,C,Dd as numbers) --------------
+function buckSS(p) {
+  const { Vin, Vref: Vout, L, rL, Cout: Cc, ESR, Rload: R } = p;
+  const a = 1 + ESR / R, D = Vout / Vin;
+  const A = [[-(rL + ESR / a) / L, -(1 / a) / L],
+             [(1 - ESR / (a * R)) / Cc, -1 / (a * R * Cc)]];
+  const Cout = [ESR / a, 1 / a];
+  return {
+    duty:  { A, B: [Vin / L, 0], C: Cout, D: 0 },
+    vin:   { A, B: [D / L, 0],   C: Cout, D: 0 },
+    iload: { A, B: [0, -1 / Cc], C: Cout, D: -ESR / a },
+  };
+}
+function boostSS(p) {
+  const { Vin, Vref: Vout, L, rL, Cout: Cc, ESR, Rload: R } = p;
+  let Dp = Vin / Vout; Dp = Math.min(Math.max(Dp, 1e-3), 0.999);
+  const IL = Vout / (Dp * R), a = 1 + ESR / R;
+  const A = [[-(Dp * Dp * ESR / a + rL) / L, -(Dp / a) / L],
+             [(Dp / a) / Cc, -1 / (a * R * Cc)]];
+  const Cout = [ESR * Dp / a, 1 / a];
+  return {
+    duty:  { A, B: [(Vout + Dp * ESR * IL / a) / L, -(IL / a) / Cc], C: Cout, D: -ESR * IL / a },
+    vin:   { A, B: [1 / L, 0], C: Cout, D: 0 },
+    iload: { A, B: [0, -1 / Cc], C: Cout, D: -ESR / a },
+  };
+}
+function ssEval(ss, w) { // H(jw) for a 2-state SISO state space
+  const jw = { re: 0, im: w };
+  const M00 = C.sub(jw, C.r(ss.A[0][0])), M01 = C.r(-ss.A[0][1]);
+  const M10 = C.r(-ss.A[1][0]),           M11 = C.sub(jw, C.r(ss.A[1][1]));
+  const det = C.sub(C.mul(M00, M11), C.mul(M01, M10));
+  // inv = 1/det [[M11,-M01],[-M10,M00]]
+  const i00 = C.div(M11, det), i01 = C.div({ re: -M01.re, im: -M01.im }, det);
+  const i10 = C.div({ re: -M10.re, im: -M10.im }, det), i11 = C.div(M00, det);
+  const B0 = C.r(ss.B[0]), B1 = C.r(ss.B[1]);
+  const x0 = C.add(C.mul(i00, B0), C.mul(i01, B1)); // (jwI-A)^-1 B
+  const x1 = C.add(C.mul(i10, B0), C.mul(i11, B1));
+  let H = C.add(C.mul(C.r(ss.C[0]), x0), C.mul(C.r(ss.C[1]), x1));
+  return C.add(H, C.r(ss.D));
+}
+const ssFor = (p) => (p.topology === "boost" ? boostSS(p) : buckSS(p));
+
+// ---- compensator / sensor / pwm at jw ------------------------------------
+function gcEval(p, w) {
+  const jw = { re: 0, im: w };
+  // PI: (Kp s + Ki)/s
+  return C.div({ re: p.Ki, im: p.Kp * w }, jw);
+}
+function sensorEval(p, w) {
+  const wl = 2 * Math.PI * p.f_lpf;
+  // Kv * wl/(s+wl)
+  return C.div(C.r(p.Kv * wl), { re: wl, im: w });
+}
+const fmGain = (p) => (p.V_ramp_pp > 0 ? 1 / p.V_ramp_pp : 1);
+
+function loopEval(ss, p, w) { // T(jw)=Gc*Fm*Gvd*sensor
+  let T = C.mul(gcEval(p, w), C.r(fmGain(p)));
+  T = C.mul(T, ssEval(ss.duty, w));
+  T = C.mul(T, sensorEval(p, w));
+  return T;
+}
+
+// ---- Bode arrays + margins ----------------------------------------------
+function bode(sysEvalFn, fArr) {
+  const mag = [], ph = [];
+  for (const f of fArr) {
+    const H = sysEvalFn(2 * Math.PI * f);
+    mag.push(20 * Math.log10(Math.max(C.abs(H), 1e-30)));
+    let a = (C.arg(H) * 180) / Math.PI;
+    ph.push(a);
+  }
+  // unwrap
+  for (let i = 1; i < ph.length; i++) {
+    let d = ph[i] - ph[i - 1];
+    while (d > 180) { ph[i] -= 360; d = ph[i] - ph[i - 1]; }
+    while (d < -180) { ph[i] += 360; d = ph[i] - ph[i - 1]; }
+  }
+  return { mag, ph };
+}
+function logspace(f0, f1, n) {
+  const a = Math.log10(f0), b = Math.log10(f1), out = [];
+  for (let i = 0; i < n; i++) out.push(Math.pow(10, a + (b - a) * i / (n - 1)));
+  return out;
+}
+function loopMetrics(ss, p) {
+  const f = logspace(1, Math.max(p.fsw, 1e6), 4000);
+  const { mag, ph } = bode((w) => loopEval(ss, p, w), f);
+  let fc = NaN, pm = NaN;
+  for (let i = 1; i < f.length; i++) {        // gain crossover (mag 0 dB, falling) — take the LAST
+    if (mag[i - 1] >= 0 && mag[i] < 0) {
+      const t = mag[i - 1] / (mag[i - 1] - mag[i]);
+      fc = Math.pow(10, Math.log10(f[i - 1]) + t * (Math.log10(f[i]) - Math.log10(f[i - 1])));
+      const phc = ph[i - 1] + t * (ph[i] - ph[i - 1]);
+      pm = 180 + phc;
+    }
+  }
+  let gm = Infinity, fpc = NaN;                // phase crossover (-180)
+  for (let i = 1; i < f.length; i++) {
+    if ((ph[i - 1] >= -180 && ph[i] < -180) || (ph[i - 1] <= -180 && ph[i] > -180)) {
+      const t = (-180 - ph[i - 1]) / (ph[i] - ph[i - 1]);
+      fpc = Math.pow(10, Math.log10(f[i - 1]) + t * (Math.log10(f[i]) - Math.log10(f[i - 1])));
+      const magc = mag[i - 1] + t * (mag[i] - mag[i - 1]);
+      gm = -magc;
+      break;
+    }
+  }
+  return { fc_hz: fc, phase_margin_deg: pm, gain_margin_db: gm, f_phase_cross_hz: fpc };
+}
+
+// ---- warnings ------------------------------------------------------------
+function loopWarnings(lm, p, f_rhp) {
+  const w = [], pm = lm.phase_margin_deg, fc = lm.fc_hz;
+  if (!isNaN(pm)) {
+    if (pm < 30) w.push(["strong", `位相余裕 ${pm.toFixed(0)}° < 30° — 非常に振動的／不安定寸前。補償器を弱め帯域を下げてください。`]);
+    else if (pm < 45) w.push(["warn", `位相余裕 ${pm.toFixed(0)}° < 45° — 減衰が小さめ。`]);
+  }
+  if (!isNaN(fc)) {
+    if (fc > p.fsw / 10) w.push(["warn", `クロスオーバ ${(fc/1e3).toFixed(1)} kHz が fsw/10 超 — スイッチング電源には高すぎ。`]);
+    if (p.topology === "boost" && isFinite(f_rhp)) {
+      if (fc > f_rhp / 3) w.push(["strong", `クロスオーバ ${fc.toFixed(0)} Hz が f_RHP/3 (${(f_rhp/3).toFixed(0)} Hz) 超。RHP零点 (${f_rhp.toFixed(0)} Hz) により安定化困難。補償器を弱める／帯域を下げる、Lを小さく・負荷を軽くして f_RHP を上げる検討を。`]);
+      else if (fc > f_rhp / 5) w.push(["warn", `クロスオーバ ${fc.toFixed(0)} Hz が f_RHP/5 (${(f_rhp/5).toFixed(0)} Hz) 超。RHP零点 (${f_rhp.toFixed(0)} Hz) より十分低く保ってください。`]);
+    }
+  }
+  const gm = lm.gain_margin_db;
+  if (isFinite(gm) && gm < 6) w.push(["warn", `ゲイン余裕 ${gm.toFixed(1)} dB < 6 dB — ロバスト性が低い。`]);
+  return w;
+}
+function opWarnings(op, p) {
+  const w = [];
+  if (p.topology === "boost") {
+    if (p.Vref <= p.Vin) w.push(["strong", "Vout ≤ Vin: 昇圧できません。Vout > Vin に。"]);
+    if (op.D > p.duty_max) w.push(["warn", `必要 Duty ${op.D.toFixed(2)} が duty_max ${p.duty_max.toFixed(2)} 超。`]);
+  } else {
+    if (op.D <= 0 || p.Vref >= p.Vin) w.push(["strong", "Vout ≥ Vin: 降圧できません。"]);
+    if (op.D > p.duty_max) w.push(["warn", `必要 Duty ${op.D.toFixed(2)} が duty_max ${p.duty_max.toFixed(2)} 超（ドロップアウト）。`]);
+  }
+  if (op.mode.startsWith("DCM")) w.push(["warn", `CCM境界 (${(op.I_boundary*1e3).toFixed(0)} mA) 未満 — DCMの懸念。平均化CCMモデルの精度低下。`]);
+  if (op.ripple_pct > 5) w.push(["warn", `出力リップル ~${op.ripple_pct.toFixed(1)}% が大。Cout増/ESR減を検討。`]);
+  return w;
+}
+
+// ---- time-domain (averaged, discrete PI) ---------------------------------
+function clamp(x, lo, hi) { return x < lo ? lo : x > hi ? hi : x; }
+
+function termVoutBuck(vc, iL, Rl, ESR) { const a = 1 + ESR / Rl; return (vc + ESR * iL) / a; }
+function termVoutBoost(vc, iL, d, Rl, ESR) { const a = 1 + ESR / Rl; return (vc + ESR * (1 - d) * iL) / a; }
+
+function simulate(p, opts = {}) {
+  const boost = p.topology === "boost";
+  const openLoop = opts.openLoop || null;   // {D0,D1,tStep}
+  const fctrl = p.fctrl, Ts = 1 / fctrl, nSub = 20, dt = Ts / nSub;
+  const tEnd = opts.tEnd != null ? opts.tEnd : p.t_end;
+  const nCtrl = Math.round(tEnd / Ts), N = nCtrl + 1;
+  const wl = p.f_lpf > 0 ? 2 * Math.PI * p.f_lpf : Infinity;
+  const bypass = !isFinite(wl);
+  const Kv = p.Kv;
+  const t = new Float64Array(N), vout = new Float64Array(N), iLa = new Float64Array(N),
+        duty = new Float64Array(N), err = new Float64Array(N);
+
+  let iL, vC, vfb, integ = 0;
+  if (boost && openLoop) {
+    const d = openLoop.D0, dp = Math.max(1 - d, 1e-3);
+    vC = p.Vin / (dp + p.rL / (dp * p.Rload)); iL = vC / (dp * p.Rload);
+    vfb = Kv * vC;
+  } else if (boost) { iL = 0; vC = p.Vin; vfb = Kv * p.Vin; }
+  else { iL = 0; vC = 0; vfb = 0; }
+
+  const deriv = (iL, vC, vfb, d, Vin, Rl) => {
+    let vt, diL, dvC;
+    if (boost) {
+      vt = termVoutBoost(vC, iL, d, Rl, p.ESR);
+      diL = (Vin - (1 - d) * vt - p.rL * iL) / p.L;
+      dvC = ((1 - d) * iL - vt / Rl) / p.Cout;
+    } else {
+      vt = termVoutBuck(vC, iL, Rl, p.ESR);
+      diL = (d * Vin - vt - p.rL * iL) / p.L;
+      dvC = (iL - vt / Rl) / p.Cout;
+    }
+    const dvfb = isFinite(wl) ? wl * (Kv * vt - vfb) : 0;
+    return [diL, dvC, dvfb];
+  };
+
+  for (let k = 0; k < N; k++) {
+    const tk = k * Ts; let Rl = p.Rload, Vin = p.Vin;
+    if (opts.loadStep && tk >= opts.loadStep.t) Rl = opts.loadStep.R;
+    if (opts.vinStep && tk >= opts.vinStep.t) Vin = opts.vinStep.V;
+    let d, e = 0;
+    if (openLoop) {
+      d = clamp(tk < openLoop.tStep ? openLoop.D0 : openLoop.D1, 0.01, 0.97);
+    } else {
+      const vref = p.ss > 0 && tk < p.ss ? p.Vref * (tk / p.ss) : p.Vref;
+      const vt = boost ? termVoutBoost(vC, iL, duty[k > 0 ? k - 1 : 0], Rl, p.ESR)
+                       : termVoutBuck(vC, iL, Rl, p.ESR);
+      const meas = bypass ? Kv * vt : vfb;
+      e = Kv * vref - meas;
+      const integT = integ + Ts * e;
+      const u = p.Kp * e + p.Ki * integT;
+      d = clamp(u, p.duty_min, p.duty_max);
+      const sat = d !== u, pushing = Math.sign(e) === Math.sign(u);
+      if (!(sat && pushing)) integ = integT;
+    }
+    const vt = boost ? termVoutBoost(vC, iL, d, Rl, p.ESR) : termVoutBuck(vC, iL, Rl, p.ESR);
+    t[k] = tk; vout[k] = vt; iLa[k] = iL; duty[k] = d; err[k] = e;
+    if (k === nCtrl) break;
+    let s = [iL, vC, bypass ? Kv * vt : vfb];
+    for (let j = 0; j < nSub; j++) {
+      const k1 = deriv(s[0], s[1], s[2], d, Vin, Rl);
+      const k2 = deriv(s[0]+0.5*dt*k1[0], s[1]+0.5*dt*k1[1], s[2]+0.5*dt*k1[2], d, Vin, Rl);
+      const k3 = deriv(s[0]+0.5*dt*k2[0], s[1]+0.5*dt*k2[1], s[2]+0.5*dt*k2[2], d, Vin, Rl);
+      const k4 = deriv(s[0]+dt*k3[0], s[1]+dt*k3[1], s[2]+dt*k3[2], d, Vin, Rl);
+      s = [s[0]+dt/6*(k1[0]+2*k2[0]+2*k3[0]+k4[0]),
+           s[1]+dt/6*(k1[1]+2*k2[1]+2*k3[1]+k4[1]),
+           s[2]+dt/6*(k1[2]+2*k2[2]+2*k3[2]+k4[2])];
+      if (bypass) s[2] = Kv * (boost ? termVoutBoost(s[1], s[0], d, Rl, p.ESR) : termVoutBuck(s[1], s[0], Rl, p.ESR));
+    }
+    iL = s[0]; vC = s[1]; vfb = s[2];
+  }
+  return { t, vout, iL: iLa, duty, err };
+}
+
+
+
+/* ---------------- presets ---------------- */
+const PRESETS = [
+ {name:"1. Stable 12V\u21925V",topology:"buck",Vin:12,Vref:5,Iout:2,Rload:2.5,L:4.7e-5,rL:0.03,Cout:2.2e-4,ESR:0.02,fsw:3e5,fctrl:1e5,Kp:0.04,Ki:300,Kv:0.5,f_lpf:8e4,V_ramp_pp:1,duty_min:0,duty_max:0.95,ss:1e-3,t_end:6e-3,desc:"\u4f4d\u76f8\u4f59\u88d5\u306e\u53d6\u308c\u305f\u5b89\u5b9a\u306a\u964d\u5727\u8a2d\u8a08\u3002"},
+ {name:"2. Slow response",topology:"buck",Vin:12,Vref:5,Iout:2,Rload:2.5,L:4.7e-5,rL:0.03,Cout:2.2e-4,ESR:0.02,fsw:3e5,fctrl:1e5,Kp:0.01,Ki:100,Kv:0.5,f_lpf:8e4,V_ramp_pp:1,duty_min:0,duty_max:0.95,ss:1e-3,t_end:15e-3,desc:"\u4f4e\u30b2\u30a4\u30f3\u3067\u30af\u30ed\u30b9\u30aa\u30fc\u30d0\u304c\u4f4e\u304f\u5fdc\u7b54\u304c\u9045\u3044\u3002"},
+ {name:"3. Oscillatory",topology:"buck",Vin:12,Vref:5,Iout:2,Rload:2.5,L:4.7e-5,rL:0.03,Cout:2.2e-4,ESR:0.02,fsw:3e5,fctrl:1e5,Kp:0.05,Ki:500,Kv:0.5,f_lpf:8e4,V_ramp_pp:1,duty_min:0,duty_max:0.95,ss:1e-4,t_end:12e-3,desc:"\u9ad8\u30b2\u30a4\u30f3\u30fb\u4f4e\u4f4d\u76f8\u4f59\u88d5\u3067\u5927\u304d\u306a\u30aa\u30fc\u30d0\u30fc\u30b7\u30e5\u30fc\u30c8\u3068\u6e1b\u8870\u30ea\u30f3\u30ae\u30f3\u30b0\u3002"},
+ {name:"4. Low sensor LPF (bad PM)",topology:"buck",Vin:12,Vref:5,Iout:2,Rload:2.5,L:4.7e-5,rL:0.03,Cout:2.2e-4,ESR:0.02,fsw:3e5,fctrl:1e5,Kp:0.05,Ki:350,Kv:0.5,f_lpf:4500,V_ramp_pp:1,duty_min:0,duty_max:0.95,ss:3e-4,t_end:10e-3,desc:"\u30bb\u30f3\u30b5LPF\u304c\u30af\u30ed\u30b9\u30aa\u30fc\u30d0\u4ed8\u8fd1\u306b\u3042\u308a\u4f4d\u76f8\u4f59\u88d5\u304c\u60aa\u5316\u3002"},
+ {name:"5. Duty saturation",topology:"buck",Vin:6,Vref:5,Iout:2,Rload:2.5,L:4.7e-5,rL:0.08,Cout:2.2e-4,ESR:0.02,fsw:3e5,fctrl:1e5,Kp:0.05,Ki:400,Kv:0.5,f_lpf:8e4,V_ramp_pp:1,duty_min:0,duty_max:0.8,ss:5e-4,t_end:8e-3,desc:"Vin \u304c Vout \u306b\u8fd1\u304f Duty \u304c\u4e0a\u9650\u306b\u5f35\u308a\u4ed8\u304f\u3002"},
+ {name:"6. Light load (DCM risk)",topology:"buck",Vin:12,Vref:5,Iout:0.05,Rload:100,L:4.7e-5,rL:0.03,Cout:2.2e-4,ESR:0.02,fsw:3e5,fctrl:1e5,Kp:0.015,Ki:100,Kv:0.5,f_lpf:8e4,V_ramp_pp:1,duty_min:0,duty_max:0.95,ss:1e-3,t_end:12e-3,desc:"\u8efd\u8ca0\u8377\u3067 CCM \u5883\u754c\u3092\u4e0b\u56de\u308a DCM \u306e\u61f8\u5ff5\u3002"},
+ {name:"B1. Boost 5V\u219215V (stable)",topology:"boost",Vin:5,Vref:15,Iout:3,Rload:5,L:1.5e-4,rL:0.05,Cout:4.7e-4,ESR:0.03,fsw:3e5,fctrl:2e5,Kp:0.008,Ki:40,Kv:0.25,f_lpf:1.2e5,V_ramp_pp:1,duty_min:0,duty_max:0.9,ss:2e-3,t_end:30e-3,desc:"\u6607\u5727 5V\u219215V\u3002\u30af\u30ed\u30b9\u30aa\u30fc\u30d0\u3092 RHP \u96f6\u70b9\u3088\u308a\u5341\u5206\u4f4e\u304f\u3057\u305f\u5b89\u5b9a\u8a2d\u8a08\u3002"},
+ {name:"B2. Boost aggressive (RHP warning)",topology:"boost",Vin:5,Vref:15,Iout:3,Rload:5,L:1.5e-4,rL:0.05,Cout:4.7e-4,ESR:0.03,fsw:3e5,fctrl:2e5,Kp:0.02,Ki:80,Kv:0.25,f_lpf:1.2e5,V_ramp_pp:1,duty_min:0,duty_max:0.9,ss:2e-3,t_end:30e-3,desc:"\u30af\u30ed\u30b9\u30aa\u30fc\u30d0\u3092 RHP \u96f6\u70b9\u306b\u8fd1\u3065\u3051\u305f\u4f8b\u3002\u53f3\u534a\u5e73\u9762\u96f6\u70b9\u3067\u4f4d\u76f8\u4f59\u88d5\u304c\u5d29\u308c\u308b\u3002"},
+];
+const FIELDS = [
+ ["Vin","Vin [V]",1],["Vref","Vout [V]",1],["Iout","Iout [A]",1],["Rload","Rload [\u03a9]",1],
+ ["L","L [\u00b5H]",1e6],["rL","rL [\u03a9]",1],["Cout","Cout [\u00b5F]",1e6],["ESR","ESR [m\u03a9]",1e3],
+ ["fsw","fsw [kHz]",1e-3],["fctrl","fctrl [kHz]",1e-3],["Kp","Kp",1],["Ki","Ki",1],
+ ["Kv","Kv",1],["f_lpf","sensor LPF [kHz]",1e-3],["duty_max","duty_max",1],["t_end","sim [ms]",1e3],
+];
+let P = Object.assign({}, PRESETS[0]);
+
+/* ---------------- plotting ---------------- */
+function setupCanvas(cv, h){
+  const dpr = Math.min(window.devicePixelRatio||1, 2.5);
+  const w = cv.clientWidth || cv.parentElement.clientWidth-28;
+  cv.width = w*dpr; cv.height = h*dpr; cv.style.height = h+"px";
+  const g = cv.getContext("2d"); g.setTransform(dpr,0,0,dpr,0,0);
+  return {g,w,h};
+}
+function niceTicks(lo,hi,n){
+  const span=hi-lo||1, raw=span/n, mag=Math.pow(10,Math.floor(Math.log10(raw)));
+  const norm=raw/mag, step=(norm<1.5?1:norm<3?2:norm<7?5:10)*mag;
+  const t=[]; for(let v=Math.ceil(lo/step)*step; v<=hi+1e-9; v+=step) t.push(v); return t;
+}
+function plot(cv,o){
+  const H=o.h||170, S=setupCanvas(cv,H), g=S.g, w=S.w;
+  const L=42,R=10,T=10,B=24, pw=w-L-R, ph=H-T-B;
+  g.clearRect(0,0,w,H);
+  const cLine=getCSS('--line'),cFaint=getCSS('--faint'),cDim=getCSS('--dim');
+  const xlog=o.xlog;
+  const xs=o.series.flatMap(s=>s.x), ys=o.series.flatMap(s=>s.y).filter(isFinite);
+  let x0=o.xmin!=null?o.xmin:Math.min(...xs), x1=o.xmax!=null?o.xmax:Math.max(...xs);
+  let y0=o.ymin!=null?o.ymin:Math.min(...ys), y1=o.ymax!=null?o.ymax:Math.max(...ys);
+  if(y0===y1){y0-=1;y1+=1;} const pad=(y1-y0)*0.08; y0-=pad;y1+=pad;
+  const X=xlog?(v=>L+(Math.log10(v)-Math.log10(x0))/(Math.log10(x1)-Math.log10(x0))*pw)
+              :(v=>L+(v-x0)/(x1-x0)*pw);
+  const Y=v=>T+ph-(v-y0)/(y1-y0)*ph;
+  g.font="10px "+getCSS('--mono'); g.textBaseline="middle";
+  const yt=niceTicks(y0,y1,4);
+  g.strokeStyle=cLine; g.fillStyle=cFaint; g.lineWidth=1;
+  yt.forEach(v=>{const y=Y(v); g.globalAlpha=.5;g.beginPath();g.moveTo(L,y);g.lineTo(L+pw,y);g.stroke();g.globalAlpha=1;
+    g.textAlign="right"; g.fillText(o.yfmt?o.yfmt(v):(Math.abs(v)<1000?(""+(+v.toFixed(2))):v.toFixed(0)),L-6,y);});
+  if(xlog){
+    const d0=Math.floor(Math.log10(x0)),d1=Math.ceil(Math.log10(x1));
+    g.textAlign="center";
+    for(let d=d0;d<=d1;d++){const x=X(Math.pow(10,d)); if(x<L-1||x>L+pw+1)continue;
+      g.globalAlpha=.5;g.beginPath();g.moveTo(x,T);g.lineTo(x,T+ph);g.stroke();g.globalAlpha=1;
+      const lab=Math.pow(10,d)>=1000?(Math.pow(10,d)/1000)+"k":""+Math.pow(10,d);
+      g.fillText(lab,x,T+ph+12);}
+  }else{
+    const xt=niceTicks(x0,x1,4); g.textAlign="center";
+    xt.forEach(v=>{const x=X(v); g.globalAlpha=.5;g.beginPath();g.moveTo(x,T);g.lineTo(x,T+ph);g.stroke();g.globalAlpha=1;
+      g.fillText(""+(+v.toFixed(2)),x,T+ph+12);});
+  }
+  (o.hlines||[]).forEach(hl=>{const y=Y(hl.y); g.strokeStyle=hl.color;g.lineWidth=1;g.setLineDash(hl.dash||[3,3]);
+    g.beginPath();g.moveTo(L,y);g.lineTo(L+pw,y);g.stroke();g.setLineDash([]);});
+  (o.vlines||[]).forEach(vl=>{const x=X(vl.x); if(x<L||x>L+pw)return;
+    g.strokeStyle=vl.color; g.lineWidth=1.4; g.setLineDash(vl.dash||[5,4]);
+    g.beginPath();g.moveTo(x,T);g.lineTo(x,T+ph);g.stroke();g.setLineDash([]);});
+  o.series.forEach(s=>{g.strokeStyle=s.color;g.lineWidth=s.w||1.8;g.beginPath();
+    let started=false;
+    for(let i=0;i<s.x.length;i++){const xx=X(s.x[i]),yy=Y(s.y[i]);
+      if(!isFinite(xx)||!isFinite(yy)){started=false;continue;}
+      if(!started){g.moveTo(xx,yy);started=true;}else g.lineTo(xx,yy);}
+    g.stroke();});
+  g.strokeStyle=cLine;g.lineWidth=1;g.strokeRect(L,T,pw,ph);
+  if(o.ylabel){g.save();g.translate(11,T+ph/2);g.rotate(-Math.PI/2);g.fillStyle=cDim;
+    g.textAlign="center";g.fillText(o.ylabel,0,0);g.restore();}
+}
+const getCSS=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+/* ---------------- UI ---------------- */
+const $=id=>document.getElementById(id);
+function buildPresetList(){
+  const sel=$("preset"); sel.innerHTML="";
+  PRESETS.forEach((p,i)=>{if(p.topology===P.topology){const o=document.createElement("option");
+    o.value=i;o.textContent=p.name;sel.appendChild(o);}});
+}
+function buildParams(){
+  const box=$("params"); box.innerHTML="";
+  FIELDS.forEach(f=>{const d=document.createElement("div");d.className="fld";
+    d.innerHTML='<label>'+f[1]+'</label><input type="number" data-k="'+f[0]+'" data-s="'+f[2]+'">';
+    box.appendChild(d);});
+  syncParams();
+  box.querySelectorAll("input").forEach(inp=>inp.addEventListener("input",e=>{
+    const k=e.target.dataset.k, s=+e.target.dataset.s, v=parseFloat(e.target.value);
+    if(isFinite(v)){P[k]=v/s; recompute();}
+  }));
+}
+function syncParams(){
+  $("params").querySelectorAll("input").forEach(inp=>{
+    const s=+inp.dataset.s, v=P[inp.dataset.k]*s;
+    inp.value = Math.abs(v)>=100?(+v.toFixed(1)):(+v.toFixed(4));
+  });
+}
+function chip(k,v,unit,cls){return '<div class="chip '+(cls||'')+'"><div class="k">'+k+'</div><div class="v">'+v+'<small>'+(unit?(" "+unit):"")+'</small></div></div>';}
+
+function recompute(){
+  const op=operatingPoint(P), ss=ssFor(P), lm=loopMetrics(ss,P);
+  const isB=P.topology==="boost";
+  let c="";
+  c+=chip(isB?"D = 1\u2212Vin/Vout":"D = Vout/Vin", op.D.toFixed(3), "", "hi");
+  c+=chip("Pout", op.Pout.toFixed(2), "W");
+  c+=chip("Iin (ideal)", op.Iin.toFixed(3), "A");
+  c+=chip("\u5c0e\u901a\u30e2\u30fc\u30c9", op.mode, "", op.mode[0]==="D"?"amber":"good");
+  c+=chip("\u0394IL", op.dIL.toFixed(3), "A");
+  c+=chip("\u0394Vout", (op.dVout*1e3).toFixed(1), "mV");
+  c+=chip("f_LC", (op.f_lc/1e3).toFixed(2), "kHz");
+  c+=chip("\u51fa\u529b\u30ea\u30c3\u30d7\u30eb", op.ripple_pct.toFixed(2), "%", op.ripple_pct>5?"amber":"");
+  if(isB) c+=chip("f_RHP (\u53f3\u534a\u5e73\u9762\u96f6\u70b9)", (op.f_rhp/1e3).toFixed(3), "kHz", "amber");
+  $("opChips").innerHTML=c;
+  renderWarns($("opWarns"), opWarnings(op,P), op.mode[0]!=="D"&&op.ripple_pct<=5);
+
+  $("boostCtrls").style.display=isB?"block":"none";
+  if(isB) drawInverse();
+  drawClosedLoop();
+
+  let lc="";
+  const pm=lm.phase_margin_deg, fc=lm.fc_hz, gm=lm.gain_margin_db;
+  lc+=chip("\u30af\u30ed\u30b9\u30aa\u30fc\u30d0 fc", isNaN(fc)?"\u2014":(fc<1000?fc.toFixed(0):(fc/1e3).toFixed(2)+"k"), "Hz", "");
+  lc+=chip("\u4f4d\u76f8\u4f59\u88d5 PM", isNaN(pm)?"\u2014":pm.toFixed(1), "\u00b0", pm<30?"bad":pm<45?"amber":"good");
+  lc+=chip("\u30b2\u30a4\u30f3\u4f59\u88d5 GM", isFinite(gm)?gm.toFixed(1):"\u221e", "dB", (isFinite(gm)&&gm<6)?"amber":"");
+  if(isB) lc+=chip("f_RHP", (op.f_rhp/1e3).toFixed(3), "kHz","amber");
+  $("loopChips").innerHTML=lc;
+  drawBode(ss,lm,op);
+  renderWarns($("loopWarns"), loopWarnings(lm,P,op.f_rhp), false);
+}
+function renderWarns(el,ws,okMsg){
+  el.innerHTML="";
+  if(ws.length===0){ if(okMsg){el.innerHTML='<div class="w ok">\u91cd\u5927\u306a\u8b66\u544a\u306f\u3042\u308a\u307e\u305b\u3093\uff08\u6982\u7b97\u7bc4\u56f2\u5185\uff09\u3002</div>';} return;}
+  ws.forEach(arr=>{const d=document.createElement("div");d.className="w "+arr[0];d.textContent=arr[1];el.appendChild(d);});
+}
+function drawClosedLoop(){
+  const r=simulate(P,{});
+  const t=Array.from(r.t,x=>x*1e3), v=Array.from(r.vout);
+  plot($("timePlot"),{xlog:false,h:175,ylabel:"Vout [V]",
+    series:[{x:t,y:v,color:getCSS('--sig')}],
+    hlines:[{y:P.Vref,color:getCSS('--faint'),dash:[4,4]}], xmin:0});
+  $("timeLegend").innerHTML='<span><i style="background:'+getCSS('--sig')+'"></i>Vout</span><span><i style="background:'+getCSS('--faint')+'"></i>Vref</span><span style="color:var(--faint)">\u6a2a\u8ef8: \u6642\u9593 [ms]</span>';
+}
+function drawInverse(){
+  const D0=Math.max(0.01,1-P.Vin/P.Vref);
+  const bd=parseFloat($("bd").value)||0.05, bt=(parseFloat($("bt").value)||1)*1e-3, bte=(parseFloat($("bte").value)||5)*1e-3;
+  const r=simulate(P,{openLoop:{D0:D0,D1:D0+bd,tStep:bt},tEnd:bte});
+  const t=Array.from(r.t,x=>x*1e3), v=Array.from(r.vout);
+  let istep=0;for(;istep<r.t.length;istep++)if(r.t[istep]>=bt)break;
+  const vpre=r.vout[Math.max(istep-1,0)]; let mn=1e9;for(let i=istep;i<r.vout.length;i++)mn=Math.min(mn,r.vout[i]);
+  const dip=mn-vpre;
+  plot($("invPlot"),{xlog:false,h:165,ylabel:"Vout [V]",
+    series:[{x:t,y:v,color:getCSS('--warn')}],
+    vlines:[{x:bt*1e3,color:getCSS('--bad'),dash:[5,4]}],
+    hlines:[{y:vpre,color:getCSS('--faint'),dash:[3,3]}], xmin:0});
+  $("invChips").innerHTML =
+    chip("\u30b9\u30c6\u30c3\u30d7\u524d Vout", vpre.toFixed(3),"V")+
+    chip("\u521d\u671f\u306e\u9006\u5411\u304d\u843d\u3061\u8fbc\u307f",(dip*1e3).toFixed(0),"mV", dip<-1e-3?"amber":"")+
+    chip("\u9006\u5fdc\u7b54", dip<-1e-3?"\u3042\u308a":"\u307b\u307c\u7121\u3057","", dip<-1e-3?"amber":"good");
+}
+function drawBode(ss,lm,op){
+  const f=logspace(1,Math.max(P.fsw,1e6),260);
+  const gB=bode(w=>ssEval(ss.duty,w),f);
+  const tB=bode(w=>loopEval(ss,P,w),f);
+  const isB=P.topology==="boost";
+  const vl=[]; if(!isNaN(lm.fc_hz))vl.push({x:lm.fc_hz,color:getCSS('--bad'),dash:[5,4]});
+  if(isB&&isFinite(op.f_rhp))vl.push({x:op.f_rhp,color:getCSS('--rhp'),dash:[6,3]});
+  const xmax=Math.max(P.fsw,1e6);
+  plot($("magPlot"),{xlog:true,h:155,ylabel:"Gain [dB]",xmin:1,xmax:xmax,
+    series:[{x:f,y:gB.mag,color:getCSS('--sig2'),w:1.6},{x:f,y:tB.mag,color:getCSS('--sig'),w:1.9}],
+    hlines:[{y:0,color:getCSS('--faint'),dash:[2,3]}], vlines:vl});
+  plot($("phPlot"),{xlog:true,h:150,ylabel:"Phase [\u00b0]",xmin:1,xmax:xmax,
+    series:[{x:f,y:gB.ph,color:getCSS('--sig2'),w:1.6},{x:f,y:tB.ph,color:getCSS('--sig'),w:1.9}],
+    hlines:[{y:-180,color:getCSS('--faint'),dash:[2,3]}], vlines:vl});
+  let lg='<span><i style="background:'+getCSS('--sig2')+'"></i>Gvd(s)</span><span><i style="background:'+getCSS('--sig')+'"></i>Loop T(s)</span><span><i style="background:'+getCSS('--bad')+'"></i>fc</span>';
+  if(isB)lg+='<span><i style="background:'+getCSS('--rhp')+'"></i>f_RHP</span>';
+  lg+='<span style="color:var(--faint)">\u6a2a\u8ef8: \u5468\u6ce2\u6570 [Hz]</span>';
+  $("bodeLegend").innerHTML=lg;
+}
+
+function selectTopology(t){
+  P.topology=t;
+  document.querySelectorAll("#seg button").forEach(b=>b.classList.toggle("on",b.dataset.t===t));
+  buildPresetList();
+  const first=PRESETS.findIndex(p=>p.topology===t);
+  $("preset").value=first; loadPreset(first);
+}
+function loadPreset(i){
+  P=Object.assign({},PRESETS[i]);
+  $("presetDesc").textContent=PRESETS[i].desc;
+  syncParams(); recompute();
+}
+$("seg").addEventListener("click",e=>{const b=e.target.closest("button");if(b)selectTopology(b.dataset.t);});
+$("preset").addEventListener("change",e=>loadPreset(+e.target.value));
+["bd","bt","bte"].forEach(id=>$(id).addEventListener("input",()=>{if(P.topology==="boost")drawInverse();}));
+let rz; window.addEventListener("resize",()=>{clearTimeout(rz);rz=setTimeout(recompute,150);});
+
+buildParams();
+document.querySelectorAll("#seg button").forEach(b=>b.classList.toggle("on",b.dataset.t==="buck"));
+buildPresetList(); $("preset").value=0; loadPreset(0);
+</script>
+</body>
+</html>
