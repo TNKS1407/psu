@@ -65,6 +65,15 @@
   <div class="sub">averaged model · 設計初期検討/教育用 · オフライン動作</div>
 </header>
 <div class="wrap">
+  <div class="card" style="background:linear-gradient(180deg,#172029,#141b22)">
+    <div style="font-size:13px;line-height:1.75;color:var(--ink)">
+      <b>触って読む順番：</b><br>
+      ① <b>Buck（降圧）</b>で <b>D と Vout</b> の関係を見る（理想CCMで Vout ≈ D·Vin）。<br>
+      ② <b>Boost（昇圧）</b>に切り替え、<b>デューティステップの逆応答</b>（Vout が一瞬下がってから上がる）を見る。<br>
+      ③ <b>Bode</b> を見て、Boost の <b>RHP零点</b>が制御帯域 fc を制限することを確認する。<br>
+      <span style="color:var(--dim);font-size:11.5px">見る所：動作点の D・f_RHP、Bode の 0dB 交差（=fc）とそのときの位相（=位相余裕 PM）、各カードの警告。式の前提は最下部「計算ルール」に。</span>
+    </div>
+  </div>
   <div class="card">
     <div class="seg" id="seg">
       <button data-t="buck">Buck (降圧)</button>
@@ -103,9 +112,24 @@
     <div class="legend" id="bodeLegend"></div>
     <div class="warns" id="loopWarns"></div>
   </div>
+  <details class="card" style="margin:12px 0">
+    <summary style="cursor:pointer;color:var(--sig2);font-family:var(--mono);font-size:13px;list-style:none">▸ このワークベンチの計算ルール</summary>
+    <div style="font-size:12.5px;line-height:1.75;margin-top:10px;color:var(--dim)">
+      <ul style="padding-left:1.15em;margin:0">
+        <li><b>Buck</b>（降圧）は理想CCMで <b>Vout ≈ D·Vin</b>（D = Vout/Vin）。</li>
+        <li><b>Boost</b>（昇圧）は理想CCMで <b>Vout ≈ Vin/(1−D)</b>（D = 1 − Vin/Vout）。</li>
+        <li>時間応答は<b>平均化モデル</b>を RK4 で積分。インダクタ抵抗 rL と出力コンデンサ ESR を含む（純理想ではない）。閉ループは <b>PI 制御</b>（アンチワインドアップ＋ソフトスタート、duty 飽和あり）。</li>
+        <li>Bode は <b>制御→出力 Gvd(s)</b>（青）と <b>ループゲイン T(s)=Gc·Fm·Gvd·センサ</b>（緑）を表示。0dB を横切る周波数が制御帯域 <b>fc</b>、そのときの位相から <b>位相余裕 PM = 180° + ∠T</b>、位相が −180° を横切る所のゲインから <b>ゲイン余裕</b> を読む。</li>
+        <li>Boost の <b>RHP（右半平面）零点</b>は <b>f_z = R·(1−D)² / (2πL)</b> [Hz]。負荷が重い（R小）・L大・高昇圧比（D大）ほど低くなり、制御を難しくする（ゲインは持ち上げるが位相は余計に遅らせる）。<b>Buck には出ない</b>。帯域 fc は f_RHP より十分低く保つ。</li>
+        <li>逆応答の波形は<b>開ループ</b>で duty を ΔD ステップした応答。動作点の近くの見方で、大きな ΔD では平均化・線形の前提から外れる。</li>
+        <li>周波数表示は <b>Hz</b>（内部の伝達関数は ω = 2πf で評価）。RHP零点・LC共振も Hz。</li>
+        <li><b>CCM 前提</b>。インダクタ電流が下限で 0 を切る（ILavg &lt; ΔIL/2）と <b>DCM の懸念</b>を警告。DCM では小信号応答が変わるため、RHP零点式などはそのまま当てにできない。</li>
+        <li>閉ループ起動応答は<b>参考</b>。実機の起動は電流制限・磁気飽和・負荷条件等で変わるため、この波形で起動を保証するものではない。</li>
+      </ul>
+    </div>
+  </details>
   <div class="disc">
-    平均化・小信号モデルです。スイッチングリプル厳密形状・サブハーモニック発振・
-    大信号飽和・部品ばらつき・寄生は対象外。最終判断は実機/SPICE/実測で。
+    <b style="color:var(--warn)">注意：</b>このページは<b>平均化モデル・小信号モデル</b>を使った教育用／設計初期検討用ツールです（主にCCM前提）。実際の電源設計では、スイッチングリプルの厳密形状・FET/ダイオード損失・ESR/ESL・磁気飽和・熱・レイアウト・EMI・保護回路・絶縁・部品ばらつき・サブハーモニック発振・実機/SPICE/実測を必ず確認してください。商用電源や高電圧回路では十分な安全対策が必要です。ここでの数値は設計の当たりをつけるためのもので、実機の保証ではありません。
   </div>
 </div>
 <script>
